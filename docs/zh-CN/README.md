@@ -194,23 +194,30 @@ haxelib run lime build mac
 | `metal/haxe/*` 或 `source/*`（Haxe） | `haxelib run lime build mac` 然后 `./metal/scripts/apply.sh … --build --deploy` |
 | 只改游戏资源 / mod | `haxelib run lime build mac`（或直接改 app bundle 内资源） |
 
-### 6.3 AOT 着色器缓存
+### 6.3 AOT 着色器缓存（构建时生成，不提交）
 
-`apply.sh` 会在构建前自动调用 `metal/scripts/gen_shader_aot.py`：
+烘焙好的 GLSL → MSL → `.metallib` 缓存属于**构建产物**，不进仓库
+（`ShaderAotCache.hx`、`metal/audit/aot-coverage.md` 均已 gitignore）。
+`apply.sh` 与 `make-universal.sh` 会在每次构建前重新生成：
 
-- 枚举 OpenFL/Flixel/CNE/mod 的全部 GLSL → 翻译成 MSL → 编译 `.metallib`；
-- 生成 `metal/haxe/lime/graphics/metal/ShaderAotCache.hx`（约 2.0 MB，含 114 个预编译库）；
-- 修改翻译器或 shader 后如未生效，删除缓存强制重建：
+- 枚举 OpenFL/Flixel/CNE/外部 + `mods/**/*.frag|.vert` 的全部 GLSL → MSL → `.metallib`
+  （基线：116 个 stage，114 个预编译库）；
+- **运行期组合的 shader 会自动烘焙**：mod 脚本/动态生成的 shader 无法静态枚举，
+  所以缓存 miss 时 `ShaderAot` 会把拼装好的 GLSL 原样写入 `/tmp/cne-aot-missing/`
+  （同时用运行时兜底翻译）。下一次 `apply.sh` / `make-universal.sh` 会通过
+  `--include-misses` 把这些源码一起烘焙进 MSL + `.metallib`，miss 过一次的 shader
+  从此就是预编译命中。需要干净、与机器无关的构建时设 `CNE_AOT_NO_MISSES=1`。
+- 修改翻译器或 shader 后强制重建：
 
 ```sh
-rm -f metal/haxe/lime/graphics/metal/ShaderAotCache.hx
-python3 metal/scripts/gen_shader_aot.py
+python3 metal/scripts/gen_shader_aot.py [--include-misses]
 # 删掉 hxcpp 的旧目标文件后再构建（hxcpp 不跟踪头文件/生成文件依赖）
 rm -rf export/release/macos/obj/src/lime/graphics/metal/
 ```
 
 ### 6.4 Universal（arm64 + x86_64）与 DMG
 
+脚本会先生成 AOT 缓存（含运行期组合的 shader）；
 发布用的 universal 包由脚本一次完成（Lime 的 `lime build mac` 只会按宿主架构出包，
 x86_64 的 exe/ndll 由脚本用 `HXCPP_M64` / `-DCNE_X64` 单独编译后 `lipo` 合并）：
 

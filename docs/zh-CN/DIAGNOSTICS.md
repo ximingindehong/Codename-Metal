@@ -110,6 +110,17 @@
 
 ---
 
+### 2.7 运行期组合的 shader（mod）
+
+AOT 缓存是构建产物，不提交。**运行期组合**的 shader 源（mod 脚本、动态生成的变体）无法
+静态枚举：缓存 miss 时 `ShaderAot` 会把拼装好的 GLSL 原样写入
+`/tmp/cne-aot-missing/<key>.<vert|frag>.glsl`，并在兜底开启时用运行时翻译。下一次
+`apply.sh` / `make-universal.sh` 会自动包含这些源码（`--include-misses`），把它们的
+MSL + `.metallib` 一起烘焙——miss 过一次的 shader 之后就是预编译命中。
+
+- `CNE_AOT_MISSES_DIR=<dir>`：换一个 dump 目录；
+- `CNE_AOT_NO_MISSES=1`：忽略这些 dump，做干净、与机器无关的构建。
+
 ## 3. 帧录制与直连 Metal 回放（A/B 原型）
 
 ```sh

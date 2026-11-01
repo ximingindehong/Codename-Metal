@@ -111,6 +111,19 @@ Compare with `metal/tools/frame_diff.py`; scenario regression:
 
 ---
 
+### 2.7 Runtime-composed shaders (mods)
+
+The baked AOT cache is build output and is not committed. Shader sources composed **at
+runtime** (mod scripts, generated variants) cannot be enumerated statically: on a cache
+miss `ShaderAot` dumps the exact assembled GLSL to
+`/tmp/cne-aot-missing/<key>.<vert|frag>.glsl` and translates it at runtime while the
+fallback is enabled. The next `apply.sh` / `make-universal.sh` includes those sources
+automatically (`--include-misses`) and bakes their MSL + `.metallib`, so a shader that
+missed once is precompiled from then on.
+
+- `CNE_AOT_MISSES_DIR=<dir>` - use a different dump directory.
+- `CNE_AOT_NO_MISSES=1` - ignore the dumps (clean, machine-independent build).
+
 ## 3. Frame capture + direct-Metal replay (A/B prototype)
 
 ```sh

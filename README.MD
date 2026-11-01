@@ -199,17 +199,26 @@ Run it:
 | `metal/haxe/*` or `source/*` (Haxe) | `haxelib run lime build mac`, then `apply.sh ... --build --deploy` |
 | game assets only | `haxelib run lime build mac` (or edit the app bundle directly) |
 
-### 6.3 AOT shader cache
+### 6.3 AOT shader cache (generated at build time, not committed)
 
-`apply.sh` runs `metal/scripts/gen_shader_aot.py` before building:
+The baked GLSL -> MSL -> `.metallib` cache is **build output**, so it is not in git
+(`metal/haxe/lime/graphics/metal/ShaderAotCache.hx` and `metal/audit/aot-coverage.md` are
+generated and gitignored).  `apply.sh` and `make-universal.sh` regenerate it before every
+build:
 
-- enumerates every GLSL source (OpenFL/Flixel/CNE/external) -> MSL -> `.metallib`;
-- writes `ShaderAotCache.hx` (~2.0 MB, 114 prebuilt libraries);
+- enumerates every GLSL source (OpenFL/Flixel/CNE/external + `mods/**/*.frag|.vert`)
+  -> MSL -> `.metallib` (baseline: 116 stages, 114 prebuilt libraries);
+- **runtime-composed shaders are baked automatically**: mod scripts and generated shader
+  variants cannot be enumerated statically, so on a cache miss `ShaderAot` dumps the exact
+  assembled GLSL to `/tmp/cne-aot-missing/` (and translates it at runtime while the
+  fallback is enabled).  The next `apply.sh` / `make-universal.sh` picks those sources up
+  (`--include-misses`) and bakes their MSL + `.metallib`, so a shader that missed once is
+  precompiled from then on.  Set `CNE_AOT_NO_MISSES=1` for a clean, machine-independent
+  build.
 - after changing the translator or a shader, force a rebuild:
 
 ```sh
-rm -f metal/haxe/lime/graphics/metal/ShaderAotCache.hx
-python3 metal/scripts/gen_shader_aot.py
+python3 metal/scripts/gen_shader_aot.py [--include-misses]
 rm -rf export/release/macos/obj/src/lime/graphics/metal/   # hxcpp does not track generated deps
 ```
 
@@ -222,6 +231,7 @@ rm -rf export/release/macos/obj/src/lime/graphics/metal/   # hxcpp does not trac
 ./metal/scripts/make-universal.sh --verify export/release/macos/bin/CodenameEngine.app
 ```
 
+- the script regenerates the AOT shader cache (including runtime-composed sources) first;
 - `lime build mac` only emits the host architecture; the script builds the x86_64
   executable/ndll separately (`HXCPP_M64` / `-DCNE_X64`) and merges with `lipo`;
 - DMG packaging copies the app, strips bundled third-party mods by default, re-signs

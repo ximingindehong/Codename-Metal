@@ -56,20 +56,34 @@ def expect_one(pattern, text, where, label):
 
 
 def main():
-    entries, metallib = cache_counts()
     expected = json.loads(read(EXPECTED))
-    wanted_entries = int(expected.get('cacheEntries', entries))
+    wanted_entries = int(expected.get('cacheEntries', 0))
     wanted_min = int(expected.get('minimumMetallibStages', 0))
 
     problems = []
-    if entries != wanted_entries:
-        problems.append('cache has %d entries, expected %d (metal/audit/aot-expected.json)'
-                        % (entries, wanted_entries))
-    if metallib < wanted_min:
-        problems.append('cache has %d .metallib stages, expected at least %d'
-                        % (metallib, wanted_min))
-    if metallib > entries:
-        problems.append('metallib count %d > cache entries %d (corrupt cache?)' % (metallib, entries))
+    if os.path.exists(CACHE):
+        entries, metallib = cache_counts()
+        if entries < wanted_entries:
+            problems.append('cache has %d entries, expected at least the %d-stage baseline'
+                            % (entries, wanted_entries))
+        if metallib < wanted_min:
+            problems.append('cache has %d .metallib stages, expected at least %d'
+                            % (metallib, wanted_min))
+        if metallib > entries:
+            problems.append('metallib count %d > cache entries %d (corrupt cache?)'
+                            % (metallib, entries))
+    else:
+        # The cache is generated build output now (see .gitignore and gen_shader_aot.py),
+        # so a clean checkout has no ShaderAotCache.hx.  The documented numbers refer to
+        # the committed baseline in metal/audit/aot-expected.json.
+        entries = wanted_entries
+        metallib = wanted_min
+        print('[check-docs] cache not generated yet; checking against the committed baseline')
+
+    # The README/TODO numbers describe the baseline corpus.  Runtime-composed shader
+    # sources appended by --include-misses may make the generated cache larger; the docs
+    # keep quoting the baseline so they do not depend on the local mod set.
+    baseline_missing = max(0, wanted_entries - wanted_min)
 
     readme = read(README)
     todo = read(TODO)
@@ -79,9 +93,9 @@ def main():
     todo_cov = expect_one(r'\*\*(\d+) / 116\*\*', todo, 'docs/METAL-TODO.md', 'coverage table cell')
 
     for where, value, actual, label in [
-            ('README.MD', readme_cov, entries, 'cache entries'),
-            ('README.MD', readme_libs, metallib, 'metallib stages'),
-            ('docs/METAL-TODO.md', todo_cov, metallib, 'metallib stages'),
+            ('README.MD', readme_cov, wanted_entries, 'cache entries'),
+            ('README.MD', readme_libs, wanted_min, 'metallib stages'),
+            ('docs/METAL-TODO.md', todo_cov, wanted_min, 'metallib stages'),
     ]:
         if value is not None and value != actual:
             problems.append('%s says %s = %d, cache says %d' % (where, label, value, actual))
@@ -93,8 +107,8 @@ def main():
         sys.stderr.write('hint: run python3 metal/scripts/gen_shader_aot.py and update the docs\n')
         return 1
 
-    print('[check-docs] cache %d entries, %d .metallib stages; README/TODO numbers match'
-          % (entries, metallib))
+    print('[check-docs] %d-entry / %d-metallib baseline; README/TODO numbers match'
+          % (wanted_entries, wanted_min))
     return 0
 
 

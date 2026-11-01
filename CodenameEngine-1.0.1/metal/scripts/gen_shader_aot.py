@@ -484,12 +484,24 @@ def strict_audit(entries, metallib_stats):
 
     failures = metallib_stats.get('failures') or []
     allowed = expected.get('allowedMetallibFailures') or {}
+    # Runtime-composed sources (captured via --include-misses) are local to the machine's
+    # mod set and cannot be pinned in the committed allowlist.  Their .metallib failures are
+    # reported but tolerated: the MSL entry stays in the cache and bgfx compiles it at
+    # runtime (or the shader is one of the known mod-side GLSL bugs).
+    runtime_keys = set(e['k'] for e in entries if e.get('kind') == 'runtime')
+    runtime_failures = 0
     current = set()
     for key, stage, error in failures:
         if key in allowed:
             current.add(key)
             continue
+        if key in runtime_keys:
+            runtime_failures += 1
+            continue
         problems.append('unexpected .metallib failure %s (%s): %s' % (key, stage, error))
+    if runtime_failures:
+        print('[gen-shader-aot] note: %d runtime-composed shader stage(s) have no .metallib '
+              '(they keep their MSL entry and compile at runtime)' % runtime_failures)
 
     for key in sorted(set(allowed) - current):
         print('[gen-shader-aot] note: %s no longer falls back (%s) - update %s'
@@ -500,17 +512,41 @@ def strict_audit(entries, metallib_stats):
     if ok < minimum:
         problems.append('.metallib coverage %d < expected minimum %d' % (ok, minimum))
 
+    # `cacheEntries` is the baseline corpus (sources enumerated from the project + mods).
+    # --include-misses appends runtime-composed shader sources captured from a play session,
+    # so the generated cache may legitimately contain more entries; never fewer.
     wanted_entries = expected.get('cacheEntries')
-    if wanted_entries is not None and len(entries) != int(wanted_entries):
-        problems.append('cache entries %d != expected %d' % (len(entries), int(wanted_entries)))
+    if wanted_entries is not None and len(entries) < int(wanted_entries):
+        problems.append('cache entries %d < expected baseline %d' % (len(entries), int(wanted_entries)))
 
     return problems
 
 
 # ----------------------------------------------------------------------- main
 
-def collect(project):
+def collect(project, misses_dir=None):
     sources, classes, roots = aot_shaders.build_sources(project)
+
+    # [runtime shaders] CustomShader sources that are composed at runtime (mod scripts,
+    # generated combinations) can never be enumerated statically.  ShaderAot.onMiss() dumps
+    # every runtime miss to /tmp/cne-aot-missing; --include-misses turns those exact sources
+    # into cache entries, so the next build has them precompiled ("bake after one play run").
+    if misses_dir:
+        misses_dir = os.path.abspath(os.path.expanduser(misses_dir))
+        if os.path.isdir(misses_dir):
+            for name in sorted(os.listdir(misses_dir)):
+                if not name.endswith('.glsl'):
+                    continue
+                path = os.path.join(misses_dir, name)
+                try:
+                    with open(path, 'r', encoding='utf-8', errors='replace') as fh:
+                        text = fh.read()
+                except OSError:
+                    continue
+                is_vertex = '.vert.' in name
+                sources.append(aot_shaders.AotSource('runtime:' + name, 'runtime',
+                                                     'vertex' if is_vertex else 'fragment', text))
+
     entries = []
     seen = set()
     for source in sources:
@@ -541,6 +577,10 @@ def main(argv=None):
                         help='do not compile .metallib payloads (MSL is compiled at runtime instead)')
     parser.add_argument('--force-metallib', action='store_true',
                         help='recompile every .metallib even if the incremental cache is valid')
+    parser.add_argument('--include-misses', action='store_true',
+                        help='also bake runtime-composed shader sources captured in --misses-dir')
+    parser.add_argument('--misses-dir', default='/tmp/cne-aot-missing',
+                        help='directory with ShaderAot.onMiss() source dumps (default: /tmp/cne-aot-missing)')
     parser.add_argument('--quiet', action='store_true')
     args = parser.parse_args(argv)
 
@@ -552,7 +592,10 @@ def main(argv=None):
         sys.stderr.write('error: missing build-time translator main: %s\n' % TRANSLATOR_MAIN)
         return 2
 
-    entries, classes, roots = collect(project)
+    entries, classes, roots = collect(project, args.misses_dir if args.include_misses else None)
+    if args.include_misses and not args.quiet:
+        print('[gen-shader-aot] runtime misses included from %s (total entries: %d)'
+              % (os.path.abspath(os.path.expanduser(args.misses_dir)), len(entries)))
     if not entries:
         sys.stderr.write('error: no GLSL sources found - refusing to write an empty cache\n')
         return 2

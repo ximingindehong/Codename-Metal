@@ -123,6 +123,22 @@ fi
 mkdir -p "$OUT"
 [ "${REUSE:-0}" = "1" ] || rm -f "$ARM_BIN" "$X64_BIN" "$ARM_NDLL" "$X64_NDLL" "$UNI_BIN" "$UNI_NDLL"
 
+# ---------------------------------------------------------------- AOT shader cache
+# The cache is build output, not committed.  Regenerate it here (including any
+# runtime-composed shader sources captured by ShaderAot.onMiss()) and mirror the result
+# into the project's source/ override so the Haxe build sees it.
+if [ "${DRY_RUN:-0}" != "1" ]; then
+	say "AOT shader cache"
+	AOT_ARGS=(--project "$PROJECT_DIR")
+	MISSES_DIR="${CNE_AOT_MISSES_DIR:-/tmp/cne-aot-missing}"
+	if [ "${CNE_AOT_NO_MISSES:-0}" != "1" ] && [ -d "$MISSES_DIR" ] \
+	&& [ -n "$(find "$MISSES_DIR" -maxdepth 1 -name '*.glsl' -print -quit 2>/dev/null)" ]; then
+		AOT_ARGS+=(--include-misses --misses-dir "$MISSES_DIR")
+	fi
+	run "python3 '$METAL_DIR/scripts/gen_shader_aot.py' ${AOT_ARGS[*]}"
+	run "cp '$METAL_DIR/haxe/lime/graphics/metal/ShaderAotCache.hx' '$PROJECT_DIR/source/lime/graphics/metal/'"
+fi
+
 restore_lime() {
 	[ "${DRY_RUN:-0}" = "1" ] && return 0
 	sed -i "" 's|\.build/osx-x64/bin|.build/osx-arm64/bin|g' "$BUILD_XML" 2>/dev/null || true

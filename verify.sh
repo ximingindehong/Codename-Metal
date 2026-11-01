@@ -46,10 +46,12 @@ python3 "$PROJECT/metal/tools/frame_diff.py" --selftest
 python3 "$PROJECT/metal/tools/profile_check.py" --selftest
 
 if [ "$RUN_AOT" = "1" ]; then
-	step "3/4 AOT cache staleness + strict coverage audit"
-	# --check: the committed ShaderAotCache.hx must match a fresh generation.
-	# --strict: .metallib coverage may only regress against metal/audit/aot-expected.json.
-	python3 "$PROJECT/metal/scripts/gen_shader_aot.py" --check --strict
+	step "3/4 AOT cache generation + strict coverage audit"
+	# The cache is build output (not committed), so generate it here: this catches
+	# translator/AOT regressions and validates .metallib coverage against
+	# metal/audit/aot-expected.json.  Runtime-composed sources are intentionally NOT
+	# included in the verify pass (they are machine-specific).
+	python3 "$PROJECT/metal/scripts/gen_shader_aot.py" --strict
 else
 	step "3/4 AOT audit skipped (--no-aot)"
 fi

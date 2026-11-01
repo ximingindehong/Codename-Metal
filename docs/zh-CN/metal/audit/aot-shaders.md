@@ -66,7 +66,7 @@
 ```
 
 > 说明：本文档只覆盖 **GLSL→MSL 翻译**这一步。**MSL→metallib** 的构建期编译
-> （运行时 `newLibraryWithSource` 归零）在 [`aot-coverage.md`](../../../../CodenameEngine-1.0.1/metal/audit/aot-coverage.md) 里，
+> （运行时 `newLibraryWithSource` 归零）在 `metal/audit/aot-coverage.md`（构建时生成，不提交） 里，
 > 两条链路是同一次 `gen_shader_aot.py` 构建期跑完的（§9.3）。
 
 ---
@@ -397,7 +397,7 @@ haxelib run lime build mac
 | `CNE_METAL_AOT_RUNTIME_TRANSLATE=1` | **显式**允许运行时翻译（默认关闭；用于运行时拼 shader 的极端情形） |
 | `CNE_METAL_DEBUG=1` | 落盘 MSL `/tmp/cne-shader-N.metal`（审计/对比用） |
 
-### 9.3 `MSL → metallib` 也 AOT 了 —— 见 [`aot-coverage.md`](../../../../CodenameEngine-1.0.1/metal/audit/aot-coverage.md)
+### 9.3 `MSL → metallib` 也 AOT 了 —— 见 `metal/audit/aot-coverage.md`（构建时生成，不提交）
 
 上一版这里写着"需要 `xcrun metal`（完整 Xcode），本次未做"。**该结论已被推翻**：
 系统自带的 Metal 编译器（`newLibraryWithSource` 驱动的那个）可以在**构建期进程**里把 MSL
@@ -405,7 +405,7 @@ haxelib run lime build mac
 **本机不需要完整 Xcode**。bgfx v166 的 `ShaderMtl::create` 本来就支持 `"MTLB"` payload
 （`renderer_mtl.cpp:4001`），所以 bgfx 零改动。
 
-实现与实测全部记在 [`aot-coverage.md`](../../../../CodenameEngine-1.0.1/metal/audit/aot-coverage.md)：运行时 `newLibraryWithSource`
+实现与实测全部记在 `metal/audit/aot-coverage.md`（构建时生成，不提交）：运行时 `newLibraryWithSource`
 的引擎 shader 调用次数 = **0**（探针 swizzle 计数），每个 stage 的加载方式
 （`metallib` / `source-compile`）都有 env-gated 日志。
 
