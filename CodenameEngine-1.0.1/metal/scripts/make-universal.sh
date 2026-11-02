@@ -142,6 +142,14 @@ fi
 restore_lime() {
 	[ "${DRY_RUN:-0}" = "1" ] && return 0
 	sed -i "" 's|\.build/osx-x64/bin|.build/osx-arm64/bin|g' "$BUILD_XML" 2>/dev/null || true
+
+	# The Intel pass writes x86_64 .o files into the shared obj tree.  A later incremental
+	# lime rebuild mac then links with them in the archive and fails ("ignoring file ...
+	# found architecture 'x86_64'"), or worse, misses symbols.  Drop the foreign-arch
+	# objects so the next arm64 build is clean.
+	find "$LIME_DIR/project/obj" -name '*.o' -print0 2>/dev/null \
+		| xargs -0 file 2>/dev/null | grep 'x86_64' | cut -d: -f1 \
+		| xargs rm -f 2>/dev/null || true
 }
 trap restore_lime EXIT
 

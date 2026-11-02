@@ -67,6 +67,13 @@ class BgfxAbi
 			+ 'template <typename T> inline auto glsl_greaterThanEqual(T a, T b) { return a >= b; }\n'
 			+ 'template <typename T> inline auto glsl_equal(T a, T b) { return a == b; }\n'
 			+ 'template <typename T> inline auto glsl_notEqual(T a, T b) { return a != b; }\n'
+			// GLSL implicitly converts the integer literal in calls like
+			// max(aaply - (directions - 1.0), 1); MSL has no max(float, int) overload, so
+			// the generated stage failed to compile (a mod camera shader then rendered black).
+			+ 'inline float max(float a, int b) { return metal::max(a, float(b)); }\n'
+			+ 'inline float max(int a, float b) { return metal::max(float(a), b); }\n'
+			+ 'inline float min(float a, int b) { return metal::min(a, float(b)); }\n'
+			+ 'inline float min(int a, float b) { return metal::min(float(a), b); }\n'
 			+ 'inline float4x4 glsl_matrixCompMult(float4x4 a, float4x4 b) { return float4x4(a[0] * b[0], a[1] * b[1], a[2] * b[2], a[3] * b[3]); }\n'
 			+ 'inline float3x3 glsl_matrixCompMult(float3x3 a, float3x3 b) { return float3x3(a[0] * b[0], a[1] * b[1], a[2] * b[2]); }\n'
 			+ 'inline float2x2 glsl_matrixCompMult(float2x2 a, float2x2 b) { return float2x2(a[0] * b[0], a[1] * b[1]); }\n'
